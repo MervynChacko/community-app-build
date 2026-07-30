@@ -1,8 +1,32 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict # added ConfigDict due to pytest deprecation warning
+from pydantic import BaseModel, Field, ConfigDict, field_validator 
+# 07302026(1) added ConfigDict due to pytest deprecation warning
+# 07302026(2) added field_validator to implement rules on posts
 from app.schemas.user import UserResponse
+import re
 
+# prohibited keyword list
+PROHIBITED = ["kill","illegal","scam"]
+
+def sanitize_text(text:str):
+    """
+    1. Mask phone number formats (123-456-7890, (123) 456-7890, 1234567890)
+    2. Redactions (illegal -> *******)
+    """
+    if not text:
+        return text
+
+    # US numbers regex
+    phone_pattern = r"\(?\b\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"
+    sanitized = re.sub(phone_pattern, "[PHONE REDACTED]", text)
+
+    # Redact prohibted words
+    for word in PROHIBITED:
+        pattern = re.compile(re.escape(word), re.IGNORECASE)
+        sanitized = pattern.sub("*" * len(word), sanitized)
+
+    return sanitized
 
 # 1. Base properties shared when creating or viewing a post
 class PostBase(BaseModel):
@@ -14,6 +38,12 @@ class PostBase(BaseModel):
     price: Optional[str] = Field(
         None, max_length=50
     )  # Used for buy/sell listings
+    @field_validator("title", "content", mode="before")
+    @classmethod
+    def moderate_content(cls, value:str) -> str:
+        if isinstance(value, str):
+            return sanitize_text(value)
+        return value
 
 
 # 2. Schema used when creating a new post
