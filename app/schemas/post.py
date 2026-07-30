@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict # added ConfigDict due to pytest deprecation warning
 from app.schemas.user import UserResponse
 
 
@@ -28,5 +28,7 @@ class PostResponse(PostBase):
     created_at: datetime
     author: UserResponse  # Embeds user information directly inside the post response!
 
-    class Config:
-        from_attributes = True
+    # class Config:             -- update due to pytest deprecation warning
+    #     from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)

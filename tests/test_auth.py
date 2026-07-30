@@ -1,12 +1,15 @@
+import uuid
 from fastapi.testclient import TestClient
 from app.main import app
 
 client = TestClient(app)
 
+# Generate unique email for each test session run and then add to payload below
+UNIQUE_EMAIL = f"testuser_{uuid.uuid4().hex[:8]}@apartment.com"
 
 def test_register_user_success():
     payload = {
-        "email": "testuser_pytest@apartment.com",
+        "email": UNIQUE_EMAIL,
         "full_name": "Test User",
         "apartment_number": "1A",
         "password": "testpassword123",
@@ -21,7 +24,7 @@ def test_register_user_success():
 
 def test_register_duplicate_email_fails():
     payload = {
-        "email": "testuser_pytest@apartment.com",
+        "email": UNIQUE_EMAIL,
         "full_name": "Duplicate User",
         "apartment_number": "1A",
         "password": "testpassword123",
@@ -36,7 +39,7 @@ def test_register_duplicate_email_fails():
 
 def test_login_success():
     payload = {
-        "email": "testuser_pytest@apartment.com",
+        "email": UNIQUE_EMAIL,
         "password": "testpassword123",
     }
     response = client.post("/auth/login", json=payload)
@@ -48,7 +51,7 @@ def test_login_success():
 
 def test_login_incorrect_password_fails():
     payload = {
-        "email": "testuser_pytest@apartment.com",
+        "email": UNIQUE_EMAIL,
         "password": "wrongpassword!",
     }
     response = client.post("/auth/login", json=payload)

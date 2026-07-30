@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict # added ConfigDict due to pytest deprecation warning
 
 
 # 1. Shared fields across all User operations
@@ -23,8 +23,10 @@ class UserResponse(UserBase):
     is_active: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True  # Allows Pydantic to read ORM objects directly from SQLAlchemy
+    # class Config:               -- update due to pytest deprecation warning
+    #     from_attributes = True  # Allows Pydantic to read ORM objects directly from SQLAlchemy
+    
+    model_config = ConfigDict(from_attributes=True)
 
 # Schema for login credentials
 class UserLogin(BaseModel):
