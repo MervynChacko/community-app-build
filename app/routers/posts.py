@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.post import Post
 from app.schemas.post import PostCreate, PostResponse
-from app.core.security import get_current_user
+from app.routers.deps import get_current_user
 
 # Number of flags threshold once hit, post is hidden from public
 FLAG_THRESHOLD = 3
