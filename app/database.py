@@ -2,12 +2,19 @@ from sqlalchemy import create_engine
 # from sqlalchemy.ext.declarative import declarative_base   -- update due to pytest deprecation warning
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# database credentials
+from app.core.config import settings
+
+"""
+Removed hardcoded database credentials and replaced with dynamic settings from app/core/config.py
+
+database credentials
 SQLALCHEMY_DATABASE_URL = (
     "postgresql://community_user:community_pass@localhost:5432/community_db"
 )
+"""
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# Construct engine using the dynamic DATABASE_URL from app/core/config.py
+engine = create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
