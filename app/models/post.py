@@ -15,6 +15,7 @@ class Post(Base):
     )  # e.g., 'buy_sell', 'general', 'announcement'
     price = Column(String, nullable=True)  # Optional price tag for items for sale
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    community_id = Column(Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=True)
 
     # Flagging and reporting fields
     report_count = Column(Integer, default=0, nullable=False)
@@ -26,3 +27,4 @@ class Post(Base):
 
     # Relationships
     author = relationship("User", back_populates="posts")
+    community = relationship("Community", back_populates="posts")

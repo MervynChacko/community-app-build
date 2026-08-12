@@ -18,6 +18,7 @@ class Channel(Base):
     __tablename__ = "channels"
 
     id = Column(Integer, primary_key=True, index=True)
+    community_id = Column(Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=True)
     name = Column(String(100), nullable=True)  # Optional for 1-1 DMs, required/custom for Groups
     type = Column(SQLEnum(ChannelType), default=ChannelType.DIRECT, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -25,6 +26,7 @@ class Channel(Base):
     # Relationships
     members = relationship("ChannelMember", back_populates="channel", cascade="all, delete-orphan")
     messages = relationship("Message", back_populates="channel", cascade="all, delete-orphan")
+    community = relationship("Community", back_populates="channels")
 
 
 class ChannelMember(Base):
