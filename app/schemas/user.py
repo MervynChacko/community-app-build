@@ -15,11 +15,13 @@ class UserCreate(UserBase):
     password: str = Field(
         ..., min_length=8, description="Password must be at least 8 characters"
     )
-
+    community_id: Optional[int] = Field(None, description="Optional community ID during registration")
+    
 
 # 3. Schema returned to clients (excludes sensitive password fields)
 class UserResponse(UserBase):
     id: int
+    community_id: Optional[int] = None
     is_active: bool
     created_at: datetime
 

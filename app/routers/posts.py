@@ -30,7 +30,8 @@ def create_post(
         content=post.content,
         category=post.category,
         price=post.price,
-        user_id=current_user.id
+        user_id=current_user.id,
+        community_id=current_user.community_id
     )
     db.add(new_post)
     db.commit()
@@ -49,9 +50,14 @@ def get_posts(
     Fetch all posts in reverse chronological order (newest first).
     Requires authentication.
     """
+    query = db.query(Post).filter(Post.is_flagged == False)
+
+    # Scoping posts to the user's community
+    if current_user.community_id is not None:
+        query = query.filter(Post.community_id == current_user.community_id)
+
     posts = (
-        db.query(Post)
-        .filter(Post.is_flagged == False)
+        query
         .order_by(Post.created_at.desc())
         .offset(skip)
         .limit(limit)

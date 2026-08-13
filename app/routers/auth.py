@@ -6,7 +6,6 @@ from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserLogin, UserResponse
 
 
-# 1. Create a router instance to group authentication/user routes together
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
@@ -33,15 +32,17 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hashed_pwd,
         full_name=user_in.full_name,
         apartment_number=user_in.apartment_number,
+        community_id=getattr(user_in, "community_id", None),
     )
 
     # Step D: Save the new user record into PostgreSQL
     db.add(new_user)
     db.commit()
-    db.refresh(new_user)  # Refreshes instance with DB-generated fields (id, created_at)
+    db.refresh(new_user)
 
-    # Step E: Return the new user (Pydantic converts this to UserResponse automatically)
+    # Step E: Return the new user
     return new_user
+
 
 @router.post("/login", response_model=Token)
 def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
@@ -55,8 +56,12 @@ def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password",
         )
 
-    # 3. Generate signed JWT token containing user's unique ID
-    access_token = create_access_token(data={"sub": str(user.id)})
+    # 3. Generate signed JWT token containing user's ID and community_id
+    token_payload = {"sub": str(user.id)}
+    if user.community_id:
+        token_payload["community_id"] = user.community_id
+
+    access_token = create_access_token(data=token_payload)
 
     # 4. Return token to client
     return {"access_token": access_token, "token_type": "bearer"}
