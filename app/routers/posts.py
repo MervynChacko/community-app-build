@@ -24,7 +24,14 @@ def create_post(
 ):
     """
     Create a new post attached to the authenticated user.
+    Check if the user belongs to a community before allowing post creation.
     """
+    if current_user.community_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to a community to create posts."
+        )
+
     new_post = Post(
         title=post.title,
         content=post.content,
@@ -50,14 +57,15 @@ def get_posts(
     Fetch all posts in reverse chronological order (newest first).
     Requires authentication.
     """
-    query = db.query(Post).filter(Post.is_flagged == False)
-
-    # Scoping posts to the user's community
-    if current_user.community_id is not None:
-        query = query.filter(Post.community_id == current_user.community_id)
+    if current_user.community_id is None:
+        return []
 
     posts = (
-        query
+        db.query(Post)
+        .filter(
+            Post.is_flagged == False,
+            Post.community_id == current_user.community_id
+        )
         .order_by(Post.created_at.desc())
         .offset(skip)
         .limit(limit)
@@ -75,7 +83,21 @@ def report_post(
     Allows authenticated residents to report an inappropriate post.
     Automatically flags and hides the post if report threshold is met
     """
-    post = db.query(Post).filter(Post.id == post_id).first()
+
+    if current_user.community_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must belong to a community to report a post"
+        )
+
+    post = (
+        db.query(Post)
+        .filter(
+            Post.id == post_id,
+            Post.community_id == current_user.community_id
+        )
+        .first()
+    )
 
     if not post:
         raise HTTPException(
