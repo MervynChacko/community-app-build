@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, ConfigDict # added ConfigDict due to pytest deprecation warning
 
+from app.models.user import UserRole 
 
 # 1. Shared fields across all User operations
 class UserBase(BaseModel):
@@ -15,13 +16,23 @@ class UserCreate(UserBase):
     password: str = Field(
         ..., min_length=8, description="Password must be at least 8 characters"
     )
-    community_id: Optional[int] = Field(None, description="Optional community ID during registration")
-    
+    # community_id: Optional[int] = Field(None, description="Optional community ID during registration")
+    """
+    BUG FIX: previously we used an optional client supplied community_id
+    which is a security risk -- client could self assign membership to any
+    community by passing interger id.
+    Instead we use staff-issued activation code: community_id
+    """
+    activation_code: str = Field(...,
+                                 min_length=1,
+                                description="Staff-issued activation code for community registration"
+                                )
 
 # 3. Schema returned to clients (excludes sensitive password fields)
 class UserResponse(UserBase):
     id: int
     community_id: Optional[int] = None
+    role: UserRole
     is_active: bool
     created_at: datetime
 
