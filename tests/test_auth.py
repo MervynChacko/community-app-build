@@ -1,6 +1,7 @@
 import uuid
 from fastapi.testclient import TestClient
 from app.main import app
+from conftest import get_test_activation_code
 
 client = TestClient(app)
 
@@ -13,6 +14,7 @@ def test_register_user_success():
         "full_name": "Test User",
         "apartment_number": "1A",
         "password": "testpassword123",
+        "activation_code": get_test_activation_code(),
     }
     response = client.post("/auth/register", json=payload)
     assert response.status_code == 201
@@ -28,6 +30,7 @@ def test_register_duplicate_email_fails():
         "full_name": "Duplicate User",
         "apartment_number": "1A",
         "password": "testpassword123",
+        "activation_code": get_test_activation_code(),
     }
     # Second registration attempt with the same email
     response = client.post("/auth/register", json=payload)

@@ -1,9 +1,12 @@
 import uuid
 from fastapi.testclient import TestClient
+
 from app.main import app
+from conftest import get_test_activation_code
+# from app.database import SessionLocal
+# from app.models.user import Community, ActivationCode
 
 client = TestClient(app)
-
 
 # Helper function to register and log in a user to obtain an auth token
 def get_auth_headers():
@@ -13,12 +16,17 @@ def get_auth_headers():
         "full_name": "Post Tester",
         "apartment_number": "3B",
         "password": "securepassword123",
+        "activation_code": get_test_activation_code(),
     }
-    client.post("/auth/register", json=payload)
+    register_res = client.post("/auth/register", json=payload)
+    # FAIL with real error instead of confusing downstream KeyError('id') two calls later
+    assert register_res.status_code == 201, f"Registration failed: {register_res.text}"
+    # client.post("/auth/register", json=payload)
     login_res = client.post(
         "/auth/login",
         json={"email": unique_email, "password": "securepassword123"},
     )
+    assert login_res.status_code == 200, f"Login failed: {login_res.text}"
     token = login_res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
