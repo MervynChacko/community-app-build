@@ -4,14 +4,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.core.config import settings
 
-"""
-Removed hardcoded database credentials and replaced with dynamic settings from app/core/config.py
 
-database credentials
-SQLALCHEMY_DATABASE_URL = (
-    "postgresql://community_user:community_pass@localhost:5432/community_db"
-)
-"""
+# Removed hardcoded database credentials and replaced with dynamic settings from app/core/config.py
 
 # Construct engine using the dynamic DATABASE_URL from app/core/config.py
 engine = create_engine(settings.DATABASE_URL)

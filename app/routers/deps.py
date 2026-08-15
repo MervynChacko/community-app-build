@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 
 # Informs FastAPI OpenAPI docs to look for Authorization: Bearer <token>
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -40,3 +40,25 @@ def get_current_user(
         raise credentials_exception
 
     return user
+
+def get_current_staff_user(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Gate for staff-only endpoints (issuing/revoking activation codes, etc.).
+ 
+    Requires both:
+      - role == STAFF (not just any authenticated user)
+      - a non-null community_id, since every staff action below is scoped
+        to "their" community -- a staff account somehow left without one
+        must not fall through to acting on/seeing all communities.
+    """
+    if current_user.role != UserRole.STAFF:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff access required",
+        )
+    if current_user.community_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff account is not linked to a community",
+        )
+    return current_user

@@ -34,7 +34,14 @@ class User(Base):
     full_name = Column(String, nullable=False)
     apartment_number = Column(String, nullable=True)
     community_id = Column(Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True)
-    role = Column(SqlEnum(UserRole), default=UserRole.RESIDENT, nullable=False)
+    # Added role with values to handle error due to SQLAlchemy's 
+    # handling of Enum types in PostgreSQL. Default value picked is the role 
+    # variable i.e. RESIDENT, STAFF and not the value
+    role = Column(
+        SqlEnum(UserRole, values_callable = lambda enum_cls: [e.value for e in enum_cls]),
+        default=UserRole.RESIDENT, 
+        nullable=False
+        )
     is_active = Column(Boolean, default=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
