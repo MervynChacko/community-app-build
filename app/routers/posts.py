@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.models.post import Post
-from app.schemas.post import PostCreate, PostResponse
+from app.schemas.post import PostCreate, PostResponse, PostUpdate
 from app.routers.deps import get_current_user
 
 # Number of flags threshold once hit, post is hidden from public
@@ -72,6 +72,101 @@ def get_posts(
         .all()
     )
     return posts
+
+@router.patch("/{post_id}", response_model=PostResponse)
+def update_post(
+    post_id: int,
+    payload: PostUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Partially upadate post. Only fields provided in the request body will be updated.
+    Requires the post to be in the caller's own community and owned by the caller.
+    -- two seperate checks, since being in same community is not sufficient to 
+    edit someone else's post.
+    """
+    if current_user.community_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User must belong to a community to edit posts."
+        )
+
+    post = (
+        db.query(Post)
+        .filter(
+            Post.id == post_id,
+            Post.community_id == current_user.community_id
+        )
+        .first()
+    )
+    if not post:
+        # same post in another community looks non existent pattern
+        # as report_post: dont leak existence across communitie boundaries
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found"
+        )
+
+    if post.user_id != current_user.id:
+        # Distinct from 404 above, within caller's own community
+        # the post existenxe is already visible via the feed
+        # therefore confirming ownership leaks no additional information
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only edit your own posts"
+        )
+
+    # exclude_unset=True: only fields the client actually included in the request
+    # body will be updated. PostUpdate has no report_count/is_flagged fields
+    # they will not be touched here regardless of update
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(post, field, value)
+
+
+    db.commit()
+    db.refresh(post)
+    return post
+
+
+@router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete a post, same community + ownership checks as update_post
+    """
+    if current_user.community_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must belong to a community to delete a post"
+        )
+
+    post = (
+        db.query(Post)
+        .filter(
+            Post.id == post_id,
+            Post.community_id == current_user.community_id
+        )
+        .first()
+    )
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found"
+        )
+    if post.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own posts"
+        )
+    db.delete(post)
+    db.commit()
+    return None
+
 
 @router.post("/{post_id}/report", response_model=PostResponse)
 def report_post(

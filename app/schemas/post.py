@@ -65,3 +65,28 @@ class PostResponse(PostBase):
     #     from_attributes = True
 
     model_config = ConfigDict(from_attributes=True)
+
+#  4. Schema used when editing an existing post. All fields optional (PATCH
+# semantics -- only fields the client actually sends get updated).
+#
+# Deliberately does NOT include report_count, is_flagged, user_id, or
+# community_id. Those must never be settable through an edit request --
+# in particular, if is_flagged were editable here, a resident whose post
+# got flagged by the community could simply PATCH it back to false
+# themselves, silently undoing moderation.
+class PostUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=3, max_length=150)
+    content: Optional[str] = Field(None, min_length=10)
+    category: Optional[str] = None
+    price: Optional[str] = Field(None, max_length=50)
+ 
+    # Re-declared explicitly here (rather than relying on inheriting
+    # PostBase's validator) so the sanitization behavior is obvious and
+    # doesn't depend on subclassing semantics -- edits go through the
+    # exact same phone-number/keyword redaction as post creation.
+    @field_validator("title", "content", mode="before")
+    @classmethod
+    def moderate_content(cls, value: str) -> str:
+        if isinstance(value, str):
+            return sanitize_text(value)
+        return value
