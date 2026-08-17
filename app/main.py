@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 import app.models  # Ensures models are registered with Base metadata
-from app.routers import auth, posts , staff
+from app.routers import auth, posts , staff, channels
 
 """
 # Create database tables automatically
@@ -28,6 +28,7 @@ app = FastAPI(
 app.include_router(auth.router)
 app.include_router(posts.router)
 app.include_router(staff.router)
+app.include_router(channels.router)
 
 @app.get("/")
 def read_root():
