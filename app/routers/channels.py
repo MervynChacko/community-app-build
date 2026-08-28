@@ -35,16 +35,20 @@ def load_channel_with_members(db: Session, channel_id: int) -> Channel:
     )
 
 
-def require_membership(db: Session, channel_id: int, user_id: int) -> None:
-    is_member = (
+def is_channel_member(db:Session, channel_id: int, user_id: int) -> bool:
+    return (
         db.query(ChannelMember)
         .filter(
             ChannelMember.channel_id == channel_id,
             ChannelMember.user_id == user_id,
         )
         .first()
+        is not None
     )
-    if not is_member:
+
+
+def require_membership(db: Session, channel_id: int, user_id: int) -> None:
+    if not is_channel_member(db, channel_id, user_id):
         # A channel you're not part of must look exactly like a channel
         # that doesn't exist -- don't confirm its existence, or that of
         # its members' conversation, to non-members.
@@ -237,6 +241,23 @@ def get_channel_messages(
     return messages
 
 
+def create_message(db:Session, channel_id: int, sender_id: int, content: str) -> Message:
+    """
+    Shared by the REST send-message endpoint below AND the WebSocket
+    handler (app/routers/ws.py) -- both paths must persist messages
+    identically, so this logic lives in exactly one place.
+    """
+    new_message = Message(
+        channel_id=channel_id,
+        sender_id=sender_id,
+        content=content,
+    )
+    db.add(new_message)
+    db.commit()
+    db.refresh(new_message)
+    return new_message
+
+
 @router.post("/{channel_id}/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 def send_message(
     channel_id: int,
@@ -246,12 +267,9 @@ def send_message(
 ):
     require_membership(db, channel_id, current_user.id)
 
-    new_message = Message(
-        channel_id=channel_id,
-        sender_id=current_user.id,
-        content=payload.content,
-    )
-    db.add(new_message)
-    db.commit()
-    db.refresh(new_message)
-    return new_message
+    return create_message(
+        db, 
+        channel_id=channel_id, 
+        sender_id=current_user.id, 
+        content=payload.content
+        )

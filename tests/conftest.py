@@ -7,9 +7,13 @@ around it (inside their own get_auth_headers() / payload dicts), rather
 than receiving it as an injected fixture argument.
 """
 import uuid
+from fastapi.testclient import TestClient
 
+from app.main import app
 from app.database import SessionLocal
 from app.models.user import Community, ActivationCode
+
+client = TestClient(app)
 
 # Cached across the whole pytest run (shared by every test file that
 # imports this function, since Python only loads this module once per
@@ -19,7 +23,7 @@ _test_activation_code_cache = {"code": None}
 _second_test_activation_code_cache = {"code": None}
 
 
-def _create_test_activation_code(prefix: str) -> str:
+def create_test_activation_code(prefix: str) -> str:
     db = SessionLocal()
     try:
         community_code = f"{prefix}-{uuid.uuid4().hex[:8].upper()}"
@@ -33,7 +37,7 @@ def _create_test_activation_code(prefix: str) -> str:
         activation_code = ActivationCode(
             code=f"{prefix}-{uuid.uuid4().hex}",
             community_id=community.id,
-            max_uses=10_000,  # effectively unlimited for one test run
+            max_uses=10000,  # effectively unlimited for one test run
             used_count=0,
             is_active=True,
             expires_at=None,
@@ -54,7 +58,7 @@ def get_test_activation_code() -> str:
     authenticated staff user, which tests don't have.
     """
     if _test_activation_code_cache["code"] is None:
-        _test_activation_code_cache["code"] = _create_test_activation_code("TESTCOMM")
+        _test_activation_code_cache["code"] = create_test_activation_code("TESTCOMM")
     return _test_activation_code_cache["code"]
  
  
@@ -66,5 +70,35 @@ def get_second_test_activation_code() -> str:
     belongs to Community A.
     """
     if _second_test_activation_code_cache["code"] is None:
-        _second_test_activation_code_cache["code"] = _create_test_activation_code("TESTCOMM2")
+        _second_test_activation_code_cache["code"] = create_test_activation_code("TESTCOMM2")
     return _second_test_activation_code_cache["code"]
+
+
+def register_and_login(activation_code: str = None):
+    """
+    Registers and logs in frest user, returning both auth headers and 
+    new user id. Shared bu test_channels.py and test_websockets.py 
+    - both need recipient_id/member_ids/user_id, not just headers
+    """
+    unique_email = f"chat_tester_{uuid.uuid4().hex[:8]}@apartment.com"
+    payload = {
+        "email": unique_email,
+        "full_name": "Chat Tester",
+        "apartment_number": "4C",
+        "password": "securepassword123",
+        "activation_code": activation_code or get_test_activation_code(),
+    }
+    register_res = client.post("/auth/register", json=payload)
+    assert register_res.status_code == 201, f"Registration failed: {register_res.text}"
+    user_id = register_res.json()["id"]
+
+    login_res = client.post(
+        "/auth/login",
+        json={
+            "email": unique_email,
+            "password": "securepassword123"
+        },
+    )
+    assert login_res.status_code == 200, f"Login failed: {login_res.text}"
+    token = login_res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}, user_id

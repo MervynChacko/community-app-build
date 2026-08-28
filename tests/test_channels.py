@@ -1,33 +1,33 @@
-import uuid
 from fastapi.testclient import TestClient
 from app.main import app
-from conftest import get_test_activation_code, get_second_test_activation_code
+from conftest import get_test_activation_code, get_second_test_activation_code, register_and_login
 
 client = TestClient(app)
 
 
-def register_and_login(activation_code: str = None):
-    """Like get_auth_headers() in test_posts.py, but also returns the
-    new user's id -- channel tests need recipient_id/member_ids."""
-    unique_email = f"chat_tester_{uuid.uuid4().hex[:8]}@apartment.com"
-    payload = {
-        "email": unique_email,
-        "full_name": "Chat Tester",
-        "apartment_number": "4C",
-        "password": "securepassword123",
-        "activation_code": activation_code or get_test_activation_code(),
-    }
-    register_res = client.post("/auth/register", json=payload)
-    assert register_res.status_code == 201, f"Registration failed: {register_res.text}"
-    user_id = register_res.json()["id"]
+# Replaced block with update into conftest -- 08182026
+# def register_and_login(activation_code: str = None):
+#     """Like get_auth_headers() in test_posts.py, but also returns the
+#     new user's id -- channel tests need recipient_id/member_ids."""
+#     unique_email = f"chat_tester_{uuid.uuid4().hex[:8]}@apartment.com"
+#     payload = {
+#         "email": unique_email,
+#         "full_name": "Chat Tester",
+#         "apartment_number": "4C",
+#         "password": "securepassword123",
+#         "activation_code": activation_code or get_test_activation_code(),
+#     }
+#     register_res = client.post("/auth/register", json=payload)
+#     assert register_res.status_code == 201, f"Registration failed: {register_res.text}"
+#     user_id = register_res.json()["id"]
 
-    login_res = client.post(
-        "/auth/login",
-        json={"email": unique_email, "password": "securepassword123"},
-    )
-    assert login_res.status_code == 200, f"Login failed: {login_res.text}"
-    token = login_res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}, user_id
+#     login_res = client.post(
+#         "/auth/login",
+#         json={"email": unique_email, "password": "securepassword123"},
+#     )
+#     assert login_res.status_code == 200, f"Login failed: {login_res.text}"
+#     token = login_res.json()["access_token"]
+#     return {"Authorization": f"Bearer {token}"}, user_id
 
 
 # ---- direct channel tests ----
