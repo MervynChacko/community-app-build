@@ -56,9 +56,11 @@ async def websocket_chat(websocket: WebSocket):
     4. Server persists(identical logic to REST endpoint, via shared create_message helper)
     and broadcasts {"type": "message",...} to all members of channel
 
-    NOTE: @08282026 temporary [WS DEBUG] print statements are included below to
+    Update: 
+    - 08282026: temporary [WS DEBUG] print statements are included below to
     pin down an intermittent hang under pytest's TestClient with two
     simultaneous connections. 
+    - 08292026: removed temp [WS DEBUG] logs 
     """
 
     await websocket.accept()
@@ -133,21 +135,21 @@ async def websocket_chat(websocket: WebSocket):
             return
 
         manager.connect(user.id, websocket)
-        print(f"[WS DEBUG] about to send auth_success to user_id = {user.id}", flush=True)  # @08282026 Added stepwise logging due to hang in test_ws_send_and_broadcast_to_channel_member testcase 
+        # print(f"[WS DEBUG] about to send auth_success to user_id = {user.id}", flush=True)  # @08282026 Added stepwise logging due to hang in test_ws_send_and_broadcast_to_channel_member testcase 
         await websocket.send_json(
             {
                 "type": "auth_success",
                 "user_id": user.id
             }
         )
-        print(f"[WS DEBUG] auth_success sent to user_id = {user.id}", flush=True)   # @08282026
+        # print(f"[WS DEBUG] auth_success sent to user_id = {user.id}", flush=True)   # @08282026
 
         # Main receive loop
 
         while True:
-            print(f"[WS DEBUG] user_id = {user.id} waiting on receive_text()", flush=True)
+            # print (f"[WS DEBUG] user_id = {user.id} waiting on receive_text()", flush=True)
             raw = await websocket.receive_text()
-            print(f"[WS DEBUG] user_id = {user.id} received raw = {raw!r}", flush=True)
+            # print(f"[WS DEBUG] user_id = {user.id} received raw = {raw!r}", flush=True)
 
             try:
                 data = json.loads(raw)
@@ -193,7 +195,7 @@ async def websocket_chat(websocket: WebSocket):
                 continue
 
             message = await run_in_threadpool(create_message, db, channel_id=channel_id, sender_id=user.id, content=content)
-            print(f"[WS DEBUG] user_id = {user.id} created message with id = {message.id}", flush=True)
+            # print(f"[WS DEBUG] user_id = {user.id} created message with id = {message.id}", flush=True)
 
             broadcast_payload = {
                             "type": "message",
@@ -205,15 +207,15 @@ async def websocket_chat(websocket: WebSocket):
                         }
 
             member_ids = await run_in_threadpool(get_channel_member_ids_sync, db, channel_id)
-            print(f"[WS DEBUG] got member_ids = {member_ids}, about to broadcast", flush=True)
+            # print(f"[WS DEBUG] got member_ids = {member_ids}, about to broadcast", flush=True)
             await manager.broadcast_to_users(member_ids, broadcast_payload)
-            print(f"[WS DEBUG] broadcast_to_users call returned", flush=True)
+            # print(f"[WS DEBUG] broadcast_to_users call returned", flush=True)
 
     except WebSocketDisconnect:
-        print(f"[WS DEBUG] WebSocketDisconnect caught, user = {user.id if user else None}", flush=True)
+        # print(f"[WS DEBUG] WebSocketDisconnect caught, user = {user.id if user else None}", flush=True)
         pass
     finally:
         if user is not None:
             manager.disconnect(user.id, websocket)
         db.close()
-        print(f"[WS DEBUG] handler finally block done, user = {user.id if user else None}", flush=True)
+        # print(f"[WS DEBUG] handler finally block done, user = {user.id if user else None}", flush=True)
