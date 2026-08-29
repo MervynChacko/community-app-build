@@ -14,8 +14,10 @@ class ConnectionManager:
     -- a message received on server A wouldn't reach a
     user connected to server B otherwise.
 
-    -- Update: 08282026; added WS DEBUG - temp stepwise diagonistic logging into broadcast
+    -- Updates- 
+    - 08282026: added WS DEBUG - temp stepwise diagonistic logging into broadcast
     path. This is due to the prolonged execution with the test case - test_ws_send_and_broadcast_to_channel_member
+    - 08292026: Removing websocket debugging logs - 08292026 since issue with hanging script managed. 
     """
 
     def __init__(self):
@@ -28,7 +30,7 @@ class ConnectionManager:
         to be able to receive the client's first (auth) message.
         """
         self._connections.setdefault(user_id, []).append(websocket)
-        print(f"[WS DEBUG] connect: user_id = {user_id}, total_connections = {len(self._connections[user_id])}", flush=True)
+        # print(f"[WS DEBUG] connect: user_id = {user_id}, total_connections = {len(self._connections[user_id])}", flush=True)
 
     def disconnect(self, user_id: int, websocket: WebSocket) -> None:
         connections = self._connections.get(user_id)
@@ -40,26 +42,26 @@ class ConnectionManager:
             self._connections.pop(user_id, None)
 
     async def send_to_user(self, user_id: int, message: dict) -> None:
-        conns = list(self._connections.get(user_id, []))
-        print(f"[WS DEBUG] send_to_user START: user_id = {user_id}, connection_count = {len(conns)}", flush=True)
-        for ws in conns:
+        # conns = list(self._connections.get(user_id, []))
+        # print(f"[WS DEBUG] send_to_user START: user_id = {user_id}, connection_count = {len(conns)}", flush=True)
+        for ws in list(self._connections.get(user_id, [])):
             try:
-                print(f"[WS DEBUG] about to call ws.send_json for user_id = {user_id}", flush=True)
+                # print(f"[WS DEBUG] about to call ws.send_json for user_id = {user_id}", flush=True)
                 await ws.send_json(message)
-                print(f"[WS DEBUG] ws.send_json RETURNED for user_id = {user_id}", flush=True)
-            except Exception as e:
+                # print(f"[WS DEBUG] ws.send_json RETURNED for user_id = {user_id}", flush=True)
+            except Exception:
                 # Connection is dead/broken -- drop it rather than
                 # letting one bad socket break delivery to everyone else
                 # in the broadcast.
-                print(f"[WS DEBUG] send_json failed for user_id = {user_id}: {e!r}", flush=True)
+                # print(f"[WS DEBUG] send_json failed for user_id = {user_id}: {e!r}", flush=True)
                 self.disconnect(user_id, ws)
-        print(f"[WS DEBUG] send_to_user END: user_id = {user_id}", flush=True)
+        # print(f"[WS DEBUG] send_to_user END: user_id = {user_id}", flush=True)
 
     async def broadcast_to_users(self, user_ids, message: dict) -> None:
-        print(f"[WS DEBUG] broadcast_to_users START: user_id = {list(user_ids)}", flush=True)
+        # print(f"[WS DEBUG] broadcast_to_users START: user_id = {list(user_ids)}", flush=True)
         for user_id in user_ids:
             await self.send_to_user(user_id, message)
-            print(f"[WS DEBUG] broadcast_to_users END", flush=True)
+            # print(f"[WS DEBUG] broadcast_to_users END", flush=True)
 
     def is_online(self, user_id: int) -> bool:
         return bool(self._connections.get(user_id))
