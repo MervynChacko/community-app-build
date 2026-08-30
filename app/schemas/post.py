@@ -58,6 +58,8 @@ class PostResponse(PostBase):
     community_id: Optional[int] = None
     report_count: int
     is_flagged: bool
+    is_deleted: bool
+    deleted_at: Optional[datetime] = None
     created_at: datetime
     author: UserResponse  # Embeds user information directly inside the post response!
 

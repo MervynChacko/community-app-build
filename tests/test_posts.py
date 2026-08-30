@@ -3,8 +3,9 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from conftest import get_test_activation_code, get_second_test_activation_code
-# from app.database import SessionLocal
-# from app.models.user import Community, ActivationCode
+from app.database import SessionLocal
+from app.models.user import User, UserRole
+from app.models.post import Post
 
 client = TestClient(app)
 
@@ -329,3 +330,143 @@ def test_delete_post_unauthorized_fails():
 
     delete_res = client.delete(f"/posts/{post_id}")
     assert delete_res.status_code == 401
+
+
+# ---- soft delete and staff moderation ----
+
+def test_soft_delete_marks_post_as_deleted():
+    """Deleting a post soft-deletes it rather than hard-deleting it."""
+    headers = get_auth_headers()
+    post_res = client.post(
+        "/posts/",
+        json={"title": "To Delete", "content": "This will be soft-deleted."},
+        headers=headers,
+    )
+    post_id = post_res.json()["id"]
+
+    delete_res = client.delete(f"/posts/{post_id}", headers=headers)
+    assert delete_res.status_code == 204
+
+    db = SessionLocal()
+    try:
+        post_row = db.query(Post).filter(Post.id == post_id).first()
+        assert post_row is not None       # still exists in DB
+        assert post_row.is_deleted is True
+        assert post_row.deleted_at is not None
+    finally:
+        db.close()
+
+
+def test_deleted_posts_hidden_from_residents():
+    headers = get_auth_headers()
+    post_res = client.post(
+        "/posts/",
+        json={"title": "Hidden Post", "content": "Will be deleted."},
+        headers=headers,
+    )
+    post_id = post_res.json()["id"]
+
+    feed_before = [p["id"] for p in client.get("/posts/", headers=headers).json()]
+    assert post_id in feed_before
+
+    client.delete(f"/posts/{post_id}", headers=headers)
+
+    feed_after = [p["id"] for p in client.get("/posts/", headers=headers).json()]
+    assert post_id not in feed_after
+
+
+def test_cannot_edit_deleted_post():
+    headers = get_auth_headers()
+    post_res = client.post(
+        "/posts/",
+        json={"title": "Editable", "content": "Original content."},
+        headers=headers,
+    )
+    post_id = post_res.json()["id"]
+
+    client.delete(f"/posts/{post_id}", headers=headers)
+
+    edit_res = client.patch(
+        f"/posts/{post_id}",
+        json={"title": "Hacked Title"},
+        headers=headers,
+    )
+    assert edit_res.status_code == 404
+
+
+def test_cannot_report_deleted_post():
+    headers = get_auth_headers()
+    post_res = client.post(
+        "/posts/",
+        json={"title": "To Report", "content": "Some content here."},
+        headers=headers,
+    )
+    post_id = post_res.json()["id"]
+
+    client.delete(f"/posts/{post_id}", headers=headers)
+
+    report_res = client.post(f"/posts/{post_id}/report", headers=headers)
+    assert report_res.status_code == 404
+
+
+def test_staff_can_delete_other_residents_posts():
+    db = SessionLocal()
+    try:
+        resident_headers = get_auth_headers()
+        staff_headers = get_auth_headers()
+
+        # Extract staff user's id from their JWT
+        from app.core.security import decode_access_token
+        staff_token = staff_headers["Authorization"].split(" ")[1]
+        staff_id = int(decode_access_token(staff_token)["sub"])
+
+        # Elevate to staff directly in DB
+        staff_user = db.query(User).filter(User.id == staff_id).first()
+        staff_user.role = UserRole.STAFF
+        db.commit()
+
+        post_res = client.post(
+            "/posts/",
+            json={"title": "Staff Override Test", "content": "Deletable by staff."},
+            headers=resident_headers,
+        )
+        post_id = post_res.json()["id"]
+
+        delete_res = client.delete(f"/posts/{post_id}", headers=staff_headers)
+        assert delete_res.status_code == 204
+
+        feed = [p["id"] for p in client.get("/posts/", headers=resident_headers).json()]
+        assert post_id not in feed
+    finally:
+        db.close()
+
+
+def test_resident_cannot_delete_other_residents_posts():
+    resident_1_headers = get_auth_headers()
+    resident_2_headers = get_auth_headers()
+
+    post_res = client.post(
+        "/posts/",
+        json={"title": "Protected Post", "content": "Resident 2 can't delete this."},
+        headers=resident_1_headers,
+    )
+    post_id = post_res.json()["id"]
+
+    delete_res = client.delete(f"/posts/{post_id}", headers=resident_2_headers)
+    assert delete_res.status_code == 403
+
+    feed = [p["id"] for p in client.get("/posts/", headers=resident_1_headers).json()]
+    assert post_id in feed
+
+
+def test_cannot_delete_already_deleted_post():
+    headers = get_auth_headers()
+    post_res = client.post(
+        "/posts/",
+        json={"title": "Delete Twice", "content": "Some content here."},
+        headers=headers,
+    )
+    post_id = post_res.json()["id"]
+
+    assert client.delete(f"/posts/{post_id}", headers=headers).status_code == 204
+    assert client.delete(f"/posts/{post_id}", headers=headers).status_code == 404

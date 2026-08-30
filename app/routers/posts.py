@@ -1,9 +1,10 @@
 from typing import List
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.post import Post
 from app.schemas.post import PostCreate, PostResponse, PostUpdate
 from app.routers.deps import get_current_user
@@ -56,22 +57,47 @@ def get_posts(
     """
     Fetch all posts in reverse chronological order (newest first).
     Requires authentication.
+    Users can see non deleted + flagged posts only while staff can see all - moderation decision
     """
     if current_user.community_id is None:
         return []
 
-    posts = (
+    # Check role to show all posts
+    is_staff = current_user.role == UserRole.STAFF
+
+    query = (
         db.query(Post)
         .filter(
             Post.is_flagged == False,
             Post.community_id == current_user.community_id
         )
-        .order_by(Post.created_at.desc())
+    )
+
+    #Residents cannot see deleted posts while staff can for moderation
+    if not is_staff:
+        query = query.filter(Post.is_deleted == False)
+
+    posts = (
+        query.order_by(Post.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
+
     return posts
+
+    # Refactored query and operation here - 
+    # posts = (
+    #     db.query(Post)
+    #     .filter(
+    #         Post.is_flagged == False,
+    #         Post.community_id == current_user.community_id,
+    #     )
+    #     .order_by(Post.created_at.desc())
+    #     .offset(skip)
+    #     .limit(limit)
+    #     .all()
+    # )
 
 @router.patch("/{post_id}", response_model=PostResponse)
 def update_post(
@@ -96,13 +122,14 @@ def update_post(
         db.query(Post)
         .filter(
             Post.id == post_id,
-            Post.community_id == current_user.community_id
+            Post.community_id == current_user.community_id,
+            Post.is_deleted == False,       # cannot update deleted post
         )
         .first()
     )
     if not post:
         # same post in another community looks non existent pattern
-        # as report_post: dont leak existence across communitie boundaries
+        # as report_post: dont leak existence across community boundaries
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Post not found"
@@ -110,14 +137,14 @@ def update_post(
 
     if post.user_id != current_user.id:
         # Distinct from 404 above, within caller's own community
-        # the post existenxe is already visible via the feed
+        # the post existence is already visible via the feed
         # therefore confirming ownership leaks no additional information
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only edit your own posts"
         )
 
-    # exclude_unset=True: only fields the client actually included in the request
+    # exclude_unset=True: to update fields the client actually included in the request
     # body will be updated. PostUpdate has no report_count/is_flagged fields
     # they will not be touched here regardless of update
     update_data = payload.model_dump(exclude_unset=True)
@@ -137,8 +164,11 @@ def delete_post(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Delete a post, same community + ownership checks as update_post
+    Soft-delete a post (mark as deleted rather than removing it from the
+    database). Only the post's owner can delete it, or staff can delete
+    anyone's post in their community.
     """
+
     if current_user.community_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -149,7 +179,8 @@ def delete_post(
         db.query(Post)
         .filter(
             Post.id == post_id,
-            Post.community_id == current_user.community_id
+            Post.community_id == current_user.community_id,
+            Post.is_deleted == False        # cannot delete already deleted post
         )
         .first()
     )
@@ -158,12 +189,20 @@ def delete_post(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Post not found"
         )
-    if post.user_id != current_user.id:
+    # Authorization: Owner can delete own posts and staff can delete all
+    is_owner = post.user_id == current_user.id
+    is_staff = current_user.role == UserRole.STAFF
+
+    if not (is_owner or is_staff):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete your own posts"
         )
-    db.delete(post)
+
+    # Soft delete: marking as deleted and record the timestamp
+    post.is_deleted = True
+    post.deleted_at = datetime.now(timezone.utc)
+    
     db.commit()
     return None
 
@@ -176,7 +215,8 @@ def report_post(
 ):
     """
     Allows authenticated residents to report an inappropriate post.
-    Automatically flags and hides the post if report threshold is met
+    Automatically flags and hides the post if report threshold is met.
+    Cannot report a deleted post.
     """
 
     if current_user.community_id is None:
@@ -189,7 +229,8 @@ def report_post(
         db.query(Post)
         .filter(
             Post.id == post_id,
-            Post.community_id == current_user.community_id
+            Post.community_id == current_user.community_id,
+            Post.is_deleted == False
         )
         .first()
     )
